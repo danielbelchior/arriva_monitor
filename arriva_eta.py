@@ -18,6 +18,7 @@ import json
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from ha import update_datetime, update_state
 
 import websocket
 
@@ -182,6 +183,15 @@ def build_eta_list(ddp, line_numbers, stop_id):
     etas.sort(key=lambda e: e["expected"])
     return etas
 
+def format_eta(e):
+    """Formata um ETA como '14:32 in 5 min (live, delay +1 min)'."""
+    exp = datetime.fromisoformat(e["expected"])
+    live = (
+        f"live, delay {e['delay_seconds'] // 60:+d} min"
+        if e["live"]
+        else "scheduled only"
+    )
+    return f"{exp:%H:%M} in {e['in_minutes']} min ({live})"
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -212,6 +222,10 @@ def main():
     if args.json:
         print(json.dumps(etas_by_stop, indent=2, ensure_ascii=False))
         return
+
+    # "64150080": "Son en Breugel",
+    # "64004020": "Eindhoven Central Station",
+
 
     now = datetime.now(LOCAL_TZ)
     print(f"{now:%H:%M} local time")
@@ -245,6 +259,36 @@ def main():
                     f" | planned {sch:%H:%M} | {live})"
                 )
 
+    try:
+        etas_by_stop = {s: build_eta_list(ddp, args.lines, s) for s in args.stops}
 
+        stop_64150080_son = '\n'.join([
+            format_eta(e) for e in etas_by_stop.get("64150080", [])[:2]
+        ])
+        stop_64004020_eindhoven = '\n'.join([
+            format_eta(e) for e in etas_by_stop.get("64004020", [])[:2]
+        ])
+
+        update_state('input_text.bus_from_son', stop_64150080_son)
+        update_state('input_text.bus_from_eindhoven', stop_64004020_eindhoven)
+
+        stop_64150080_son_time = [datetime.fromisoformat(e["expected"]) for e in etas_by_stop.get("64150080", [])[:2]]
+        stop_64004020_eindhoven_time = [datetime.fromisoformat(e["expected"]) for e in etas_by_stop.get("64004020", [])[:2]]
+        stop_64150080_son_time.append(None)
+        stop_64150080_son_time.append(None)
+        stop_64004020_eindhoven_time.append(None)
+        stop_64004020_eindhoven_time.append(None)
+
+        print(stop_64150080_son_time)
+        print(stop_64004020_eindhoven_time)
+
+        update_datetime('input_datetime.bus_next_from_eindhoven',stop_64004020_eindhoven_time[0])
+        update_datetime('input_datetime.bus_next_from_eindhoven_2',stop_64004020_eindhoven_time[1])
+        update_datetime('input_datetime.bus_next_from_son',stop_64150080_son_time[0])
+        update_datetime('input_datetime.bus_next_from_son_2',stop_64150080_son_time[0])
+
+    except Exception as e:
+        print(e)
+        
 if __name__ == "__main__":
     main()
