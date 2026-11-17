@@ -54,6 +54,9 @@ def fetch_actual_journeys(timeout=READY_TIMEOUT_S):
                 journeys.setdefault(msg["id"], {}).update(msg.get("fields", {}))
             elif kind == "ready" and "sub1" in msg.get("subs", []):
                 break  # initial snapshot complete
+        else:
+            print(f"warning: live feed not ready after {timeout}s, "
+                  "data may be incomplete", file=sys.stderr)
         return journeys
     finally:
         ws.close()
